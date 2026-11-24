@@ -46,7 +46,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-MERCHANT_FILES = ["merchant_geocoded_filtered.csv", "merchant_df_area_pulogadung_filtered.csv"]
+MERCHANT_FILES = ["merchant_geocoded_filtered.csv"]
 DEFAULT_POI = "poi_filtered.csv"
 EARTH = 6371000.0
 GEO_OK = ["ok", "fallback_1", "fallback_2"]

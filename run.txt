@@ -1,0 +1,3 @@
+pip install streamlit folium streamlit-folium scikit-learn pandas numpy openpyxl
+
+streamlit run app_peta_merchant.py
