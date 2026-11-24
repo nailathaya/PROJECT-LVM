@@ -9,6 +9,8 @@ Taruh di folder yang sama:
     poi_filtered.csv                 (osm_key, nama, kategori, latitude, longitude)
 Atau upload lewat sidebar > "Ganti / upload data".
 """
+
+# pip install streamlit folium streamlit-folium scikit-learn pandas numpy openpyxl
 import datetime as dt
 import html
 import io
