@@ -1224,10 +1224,10 @@ with tab_daftar:
                 kalimat = ", ".join(a + " (" + idn(b, 1) + "x)" for a, b in zip(atas["Jenis tempat"], atas["Lift"]))
                 st.markdown("Merchant paling sering berada dekat: **" + kalimat + "** dibanding titik acak di area yang sama.")
             st.bar_chart(pola.set_index("Jenis tempat")[["Lift"]].rename(columns={"Lift": "Kali lebih ramai dari titik acak"}))
-            st.caption(
-                # "Angka 1 = sama dengan titik acak, 2 = dua kali lebih ramai merchant. Ini hubungan, bukan sebab-akibat: "
-                # "sekolah bisa tampak menarik merchant hanya karena berada di permukiman padat."
-            )
+            # st.caption(
+            #     # "Angka 1 = sama dengan titik acak, 2 = dua kali lebih ramai merchant. Ini hubungan, bukan sebab-akibat: "
+            #     # "sekolah bisa tampak menarik merchant hanya karena berada di permukiman padat."
+            # )
 
     # with st.expander("Bahan pembanding: biasanya ada berapa merchant di sekitar tiap jenis tempat?"):
     #     if ref_table is None or ref_table.empty:
