@@ -51,6 +51,7 @@ MERCHANT_FILES = ["merchant_geocoded_filtered.csv"]
 DEFAULT_POI = "poi_filtered.csv"
 EARTH = 6371000.0
 GEO_OK = ["ok", "fallback_1", "fallback_2"]
+DATA_DATE = dt.date(2026, 11, 16)     # tanggal tarikan data; kolom *_ytd dihitung sampai tanggal ini
 ZOOM_FOKUS = 17          # level zoom peta saat titik potensial diklik
 
 STATUS_ORDER = ["Aktif", "Menurun", "Tidak aktif"]
@@ -231,11 +232,11 @@ s30_col = guess(cols, ["sv_30_days", "sales_30", "nominal_30"])
 fytd_col = guess(cols, ["freq_ytd", "frek_ytd", "trx_ytd"])
 sytd_col = guess(cols, ["sv_ytd", "sales_ytd", "nominal_ytd"])
 
-today = dt.date.today()
-default_months = round(max(1.0, today.month - 1 + today.day / 30), 1)
 with st.sidebar.expander("Pengaturan lanjutan"):
     st.caption("Biasanya tidak perlu diubah.")
-    months = st.number_input("Jumlah bulan berjalan di data YTD", 1.0, 12.0, float(default_months), 0.1)
+    data_date = st.date_input("Tanggal tarikan data (YTD sampai tanggal ini)", DATA_DATE)
+    months = max(1.0, ((data_date - dt.date(data_date.year, 1, 1)).days + 1) / (365.25 / 12))
+    st.caption("Rata-rata bulanan YTD dihitung dengan " + format(months, ".1f") + " bulan.")
     min_active = st.number_input("Minimal transaksi 30 hari agar disebut Aktif", 1, 1000, 5)
     drop_pct = st.slider("Penurunan dianggap tajam (%)", 10, 90, 50)
     r_m = st.slider("Radius jangkar (meter)", 100, 500, 300, 50)
