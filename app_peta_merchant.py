@@ -19,6 +19,7 @@ import folium
 import numpy as np
 import pandas as pd
 import streamlit as st
+from folium.plugins import HeatMap
 from sklearn.neighbors import BallTree
 from streamlit_folium import st_folium
 
@@ -51,7 +52,6 @@ DEFAULT_POI = "poi_filtered.csv"
 EARTH = 6371000.0
 GEO_OK = ["ok", "fallback_1", "fallback_2"]
 ZOOM_FOKUS = 17          # level zoom peta saat titik potensial diklik
-HEAT_COLORS = [(0.0, (255, 255, 178)), (0.5, (253, 141, 60)), (1.0, (189, 0, 38))]
 
 STATUS_ORDER = ["Aktif", "Menurun", "Tidak aktif"]
 STATUS_COLOR = {"Aktif": "#2f9e44", "Menurun": "#f08c00", "Tidak aktif": "#e03131"}
@@ -166,46 +166,6 @@ def pilih_tersebar(cand, n, min_sep_m):
     return cand.iloc[chosen]
 
 
-def heat_color(t):
-    t = min(max(float(t), 0.0), 1.0)
-    for (a, ca), (b, cb) in zip(HEAT_COLORS[:-1], HEAT_COLORS[1:]):
-        if t <= b:
-            f = (t - a) / (b - a)
-            return "#%02x%02x%02x" % tuple(int(round(x + (y - x) * f)) for x, y in zip(ca, cb))
-    return "#bd0026"
-
-
-@st.cache_data(show_spinner=False)
-def heat_geojson(m_lat, m_lon, r, max_cells=6000):
-    """Heatmap berbasis meter: area dibagi kotak-kotak (ukuran dalam meter), tiap kotak diwarnai menurut jumlah
-    merchant dalam radius r meter dari titik tengahnya. Karena kotaknya poligon peta (bukan piksel), ukurannya
-    ikut membesar/mengecil saat peta di-zoom."""
-    lat0 = float(np.mean(m_lat))
-    m_per_lat = 111320.0
-    m_per_lon = 111320.0 * np.cos(np.radians(lat0))
-    cell = max(r / 5.0, 50.0)
-    while True:
-        la = np.arange(m_lat.min() - r / m_per_lat, m_lat.max() + r / m_per_lat, cell / m_per_lat)
-        lo = np.arange(m_lon.min() - r / m_per_lon, m_lon.max() + r / m_per_lon, cell / m_per_lon)
-        if len(la) * len(lo) <= max_cells:
-            break
-        cell *= 1.25
-    hla, hlo = cell / m_per_lat / 2, cell / m_per_lon / 2
-    glat, glon = np.meshgrid(la + hla, lo + hlo, indexing="ij")
-    clat, clon = glat.ravel(), glon.ravel()
-    cnt = count_within(rad(clat, clon), rad(m_lat, m_lon), r)
-    cmax = int(cnt.max()) if len(cnt) else 0
-    feats = []
-    for a, b, n in zip(clat, clon, cnt):
-        if n <= 0:
-            continue
-        warna = heat_color(n / cmax)
-        ring = [[b - hlo, a - hla], [b + hlo, a - hla], [b + hlo, a + hla], [b - hlo, a + hla], [b - hlo, a - hla]]
-        feats.append({"type": "Feature", "properties": {"jumlah": int(n), "warna": warna},
-                      "geometry": {"type": "Polygon", "coordinates": [ring]}})
-    return {"type": "FeatureCollection", "features": feats}, cmax
-
-
 def set_fokus(lat, lon):
     st.session_state["fokus"] = (float(lat), float(lon))
 
@@ -279,8 +239,7 @@ with st.sidebar.expander("Pengaturan lanjutan"):
     min_active = st.number_input("Minimal transaksi 30 hari agar disebut Aktif", 1, 1000, 5)
     drop_pct = st.slider("Penurunan dianggap tajam (%)", 10, 90, 50)
     r_m = st.slider("Radius jangkar (meter)", 100, 500, 300, 50)
-    r_heat = st.slider("Radius heatmap kepadatan (meter)", 100, 1000, 500, 100)
-    min_sep = st.slider("Jarak minimal antar titik potensial (meter)", 100, 1000, 300, 50)
+    min_sep =st.slider("Jarak minimal antar titik potensial (meter)", 100, 1000, 300, 50)
     min_eks = st.number_input("Merchant yang 'biasanya' ada di tempat serupa, minimal", 0.0, 50.0, 1.0, 0.5)
     only_geo_ok = st.checkbox("Hanya titik geocode yang layak", value=True, disabled=geo_col is None)
 
@@ -415,8 +374,7 @@ with tab_peta:
     c1, c2, c3, c4 = st.columns([1, 1.3, 1.5, 2])
     show_m = c1.checkbox("Merchant", value=True)
     show_p = c2.checkbox("Titik potensial", value=True, disabled=cand.empty)
-    show_h = c3.checkbox("Kepadatan merchant", value=True,
-                         help="Warna di tiap area = jumlah merchant yang SUDAH ada dalam radius heatmap dari titik itu. Bukan potensi.")
+    show_h = c3.checkbox("Kepadatan merchant", value=True, help="Warna hangat = banyak merchant yang SUDAH ada. Bukan potensi.")
     n_pot = c4.slider("Jumlah titik potensial", 5, 30, 10)
 
     sel = pilih_tersebar(cand, n_pot, min_sep) if not cand.empty else cand
@@ -435,16 +393,9 @@ with tab_peta:
         m = folium.Map(location=list(fokus) if fokus else center, zoom_start=ZOOM_FOKUS if fokus else 14,
                        tiles="OpenStreetMap", control_scale=True)
 
-        heat_max = 0
         if show_h:
-            gj, heat_max = heat_geojson(df["lat"].to_numpy(), df["lon"].to_numpy(), r_heat)
-            if gj["features"]:
-                folium.GeoJson(
-                    gj,
-                    style_function=lambda f: {"fillColor": f["properties"]["warna"], "color": f["properties"]["warna"],
-                                              "weight": 0, "fillOpacity": 0.55},
-                    tooltip=folium.GeoJsonTooltip(fields=["jumlah"], aliases=["Merchant dalam " + str(r_heat) + " m:"]),
-                ).add_to(m)
+            HeatMap(df[["lat", "lon"]].values.tolist(), radius=25, blur=20, min_opacity=0.3,
+                    gradient={0.2: "#ffffb2", 0.5: "#fd8d3c", 1.0: "#bd0026"}).add_to(m)
 
         if show_m:
             for r in df.itertuples():
@@ -494,9 +445,7 @@ with tab_peta:
 
         if show_h:
             st.markdown("<div class='gradbar'></div>", unsafe_allow_html=True)
-            st.caption("Kepadatan merchant yang sudah ada, dihitung dalam radius " + str(r_heat) + " m dari tiap titik "
-                       "(kuning = sedikit, merah = banyak, maksimum " + str(heat_max) + " merchant). Ukuran area mengikuti "
-                       "skala peta, jadi ikut membesar saat di-zoom. Arahkan kursor ke area untuk melihat jumlahnya.")
+            st.caption("Kepadatan merchant yang sudah ada: kuning = sedikit, merah = banyak.")
         if show_p and not sel.empty:
             st.caption("Lingkaran biru putus-putus = radius " + str(r_m) + " m di sekitar titik potensial.")
 
@@ -510,11 +459,16 @@ with tab_peta:
             with st.container(height=600):
                 for rank, r in enumerate(sel.itertuples(), 1):
                     judul = r.nama if r.nama.strip() else r.jenis + " (tanpa nama)"
-                    teks, tombol = st.columns([6, 1], vertical_alignment="center")
-                    teks.markdown("&bull; **" + esc(judul) + "**  \n<span class='kecil'>" + esc(r.jenis) + "</span>",
-                                  unsafe_allow_html=True)
-                    tombol.button("🔍", key="fokus_" + str(rank), on_click=set_fokus,
-                                  args=(r.latitude, r.longitude), help="Lihat")
+                    with st.container(border=True):
+                        teks, tombol = st.columns([5, 1], vertical_alignment="center")
+                        teks.markdown(
+                            "<span class='nomor'>" + str(rank) + "</span><b>" + esc(judul) + "</b><br>"
+                            "<span class='kecil'>" + esc(r.jenis) + "</span><br>"
+                            "<a href='" + gmaps(r.latitude, r.longitude) + "' target='_blank'>Buka di Google Maps</a>",
+                            unsafe_allow_html=True,
+                        )
+                        tombol.button("🔍", key="fokus_" + str(rank), on_click=set_fokus,
+                                      args=(r.latitude, r.longitude), help="Lihat")
 
     with st.expander("Cara membaca"):
         st.markdown(
@@ -627,3 +581,4 @@ with tab_daftar:
             st.caption("'Biasanya' adalah angka pembanding untuk menilai apakah suatu titik kekurangan merchant. "
                        "Kalau angkanya terlihat janggal untuk satu jenis tempat, urutan prioritas jenis itu perlu dicurigai.")
             st.dataframe(ref_table, hide_index=True)
+        
