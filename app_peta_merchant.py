@@ -237,7 +237,8 @@ with st.sidebar.expander("Pengaturan lanjutan"):
     data_date = st.date_input("Tanggal tarikan data (YTD sampai tanggal ini)", DATA_DATE)
     months = max(1.0, ((data_date - dt.date(data_date.year, 1, 1)).days + 1) / (365.25 / 12))
     st.caption("Rata-rata bulanan YTD dihitung dengan " + format(months, ".1f") + " bulan.")
-    min_active = st.number_input("Minimal transaksi 30 hari agar disebut Aktif", 1, 1000, 5)
+    min_active = st.number_input("Minimal transaksi 30 hari agar disebut Aktif", 1, 1000, 20)
+    min_sales = st.number_input("Sales 30 hari agar disebut Aktif harus lebih dari", 0, 10**12, 100000, 10000)
     drop_pct = st.slider("Penurunan dianggap tajam (%)", 10, 90, 50)
     r_m = st.slider("Radius jangkar (meter)", 100, 500, 300, 50)
     min_sep =st.slider("Jarak minimal antar titik potensial (meter)", 100, 1000, 300, 50)
@@ -264,7 +265,9 @@ def text(c, default):
 f30, fytd = num(f30_col), num(fytd_col)
 avg_month = fytd / months
 sharp = (avg_month > 0) & (f30 < avg_month * (1 - drop_pct / 100))
-low = (f30 > 0) & (f30 < min_active)
+s30 = num(s30_col)
+low_sales = (s30 <= min_sales) if s30_col else False
+low = (f30 > 0) & ((f30 < min_active) | low_sales)      # ada transaksi, tapi belum memenuhi ambang Aktif
 status = np.select([f30 <= 0, sharp | low], [STATUS_ORDER[2], STATUS_ORDER[1]], default=STATUS_ORDER[0])
 
 df = pd.DataFrame(
@@ -277,7 +280,7 @@ df = pd.DataFrame(
         "lat": pd.to_numeric(raw[lat_col], errors="coerce"),
         "lon": pd.to_numeric(raw[lon_col], errors="coerce"),
         "frek_30": f30,
-        "sv_30": num(s30_col),
+        "sv_30": s30,
         "frek_ytd": fytd,
         "sv_ytd": num(sytd_col),
         "status": status,
@@ -477,9 +480,10 @@ with tab_peta:
             "**lebih sedikit** daripada tempat sejenis lainnya di area ini. Selisih dinilai relatif terhadap kebiasaan jenis tempatnya "
             "(mal yang biasanya 20 merchant tidak otomatis mengalahkan sekolah yang biasanya 6), dan satu kelompok jenis tempat "
             "dibatasi jumlahnya agar daftar bervariasi. Titik juga dipilih saling berjauhan.\n"
-            "- **Merchant** diberi warna: hijau = aktif (minimal " + str(min_active) + " transaksi dalam 30 hari), oranye = menurun "
-            "(transaksi turun lebih dari " + str(drop_pct) + "% dari rata-rata bulanan tahun ini, atau di bawah " + str(min_active)
-            + "), merah = tidak ada transaksi dalam 30 hari.\n"
+            "- **Merchant** diberi warna: hijau = aktif (minimal " + str(min_active) + " transaksi dan sales lebih dari "
+            + format(min_sales, ",.0f") + " dalam 30 hari), oranye = menurun (ada transaksi, tapi di bawah ambang aktif, atau "
+            "transaksi turun lebih dari " + str(drop_pct) + "% dari rata-rata bulanan tahun ini), "
+            "merah = tidak ada transaksi dalam 30 hari.\n"
             "- Ini perbandingan dengan kebiasaan tempat sejenis, **bukan jaminan** bahwa kunjungan akan menambah registrasi. "
             "Area yang kosong, tertutup, atau sudah dijangkau cabang lain tidak terdeteksi otomatis. Cek di lapangan dan catat hasilnya."
         )
