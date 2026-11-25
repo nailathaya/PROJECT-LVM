@@ -233,7 +233,7 @@
 # sytd_col = guess(cols, ["sv_ytd", "sales_ytd", "nominal_ytd"])
 
 # with st.sidebar.expander("Pengaturan lanjutan"):
-#     st.caption("Rata-rata tempat sejenis tidak perlu diubah.")
+#     st.caption("Biasanya tidak perlu diubah.")
 #     data_date = st.date_input("Tanggal tarikan data (YTD sampai tanggal ini)", DATA_DATE)
 #     months = max(1.0, ((data_date - dt.date(data_date.year, 1, 1)).days + 1) / (365.25 / 12))
 #     st.caption("Rata-rata bulanan YTD dihitung dengan " + format(months, ".1f") + " bulan.")
@@ -1133,12 +1133,12 @@ with tab_daftar:
         t1 = sel.copy().reset_index(drop=True)
         t1.insert(0, "Prioritas", range(1, len(t1) + 1))
         t1["Nama"] = [(n if n.strip() else j + " (tanpa nama)") for n, j in zip(t1["nama"], t1["jenis"])]
-        t1["Alasan"] = ["Baru " + idn(a) + " merchant dalam " + str(r_m) + " m, Rata-rata sekitar " + idn(b)
-                        for a, b in zip(t1["merchant_sekitar"], t1["Rata-rata Tempat Sejenis"])]
+        t1["Alasan"] = ["Baru " + idn(a) + " merchant dalam " + str(r_m) + " m, biasanya sekitar " + idn(b)
+                        for a, b in zip(t1["merchant_sekitar"], t1["biasanya"])]
         t1["Peta"] = [gmaps(a, b) for a, b in zip(t1["latitude"], t1["longitude"])]
-        show1 = t1[["Prioritas", "Nama", "jenis", "merchant_sekitar", "Rata-rata Tempat Sejenis", "Alasan", "Peta"]].rename(
-            columns={"jenis": "Jenis tempat", "merchant_sekitar": "Merchant di sekitar", "Rata-rata Tempat Sejenis": "Rata-rata Tempat Sejenis"})
-        show1["Rata-rata Tempat Sejenis"] = show1["Rata-rata Tempat Sejenis"].round(0)
+        show1 = t1[["Prioritas", "Nama", "jenis", "merchant_sekitar", "biasanya", "Alasan", "Peta"]].rename(
+            columns={"jenis": "Jenis tempat", "merchant_sekitar": "Merchant di sekitar", "biasanya": "Biasanya"})
+        show1["Biasanya"] = show1["Biasanya"].round(0)
         st.dataframe(show1, hide_index=True, **STRETCH,
                      column_config={"Peta": st.column_config.LinkColumn("Peta", display_text="Buka")})
         out = io.StringIO()
