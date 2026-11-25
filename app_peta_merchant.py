@@ -233,7 +233,7 @@
 # sytd_col = guess(cols, ["sv_ytd", "sales_ytd", "nominal_ytd"])
 
 # with st.sidebar.expander("Pengaturan lanjutan"):
-#     st.caption("Biasanya tidak perlu diubah.")
+#     st.caption("Rata-rata tempat sejenis tidak perlu diubah.")
 #     data_date = st.date_input("Tanggal tarikan data (YTD sampai tanggal ini)", DATA_DATE)
 #     months = max(1.0, ((data_date - dt.date(data_date.year, 1, 1)).days + 1) / (365.25 / 12))
 #     st.caption("Rata-rata bulanan YTD dihitung dengan " + format(months, ".1f") + " bulan.")
@@ -1137,7 +1137,7 @@ with tab_daftar:
                         for a, b in zip(t1["merchant_sekitar"], t1["biasanya"])]
         t1["Peta"] = [gmaps(a, b) for a, b in zip(t1["latitude"], t1["longitude"])]
         show1 = t1[["Prioritas", "Nama", "jenis", "merchant_sekitar", "biasanya", "Alasan", "Peta"]].rename(
-            columns={"jenis": "Jenis tempat", "merchant_sekitar": "Merchant di sekitar", "biasanya": "Biasanya"})
+            columns={"jenis": "Jenis tempat", "merchant_sekitar": "Merchant di sekitar", "biasanya": "Rata-rata Tempat Sejenis"})
         show1["Biasanya"] = show1["Biasanya"].round(0)
         st.dataframe(show1, hide_index=True, **STRETCH,
                      column_config={"Peta": st.column_config.LinkColumn("Peta", display_text="Buka")})
@@ -1229,10 +1229,10 @@ with tab_daftar:
             #     # "sekolah bisa tampak menarik merchant hanya karena berada di permukiman padat."
             # )
 
-    # with st.expander("Bahan pembanding: biasanya ada berapa merchant di sekitar tiap jenis tempat?"):
+    # with st.expander("Bahan pembanding: Rata-rata tempat sejenis ada berapa merchant di sekitar tiap jenis tempat?"):
     #     if ref_table is None or ref_table.empty:
     #         st.info("Belum tersedia (butuh data tempat ramai dan minimal 30 merchant).")
     #     else:
-    #         st.caption("'Biasanya' adalah angka pembanding untuk menilai apakah suatu titik kekurangan merchant. "
+    #         st.caption("'Rata-rata tempat sejenis' adalah angka pembanding untuk menilai apakah suatu titik kekurangan merchant. "
     #                    "Kalau angkanya terlihat janggal untuk satu jenis tempat, urutan prioritas jenis itu perlu dicurigai.")
     #         st.dataframe(ref_table, hide_index=True)
