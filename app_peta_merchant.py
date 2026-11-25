@@ -762,7 +762,9 @@ def pilih_tersebar(cand, n, min_sep_m):
     lat = np.radians(cand["latitude"].to_numpy())
     lon = np.radians(cand["longitude"].to_numpy())
     grp = cand["kelompok"].to_numpy()
-    cap = max(2, int(np.ceil(n / 4)))
+    jns = cand["jenis"].to_numpy()
+    cap_jenis = max(2, int(np.ceil(n / 4)))      # batas per jenis tempat (mis. Sekolah)
+    cap_grup = max(cap_jenis, int(np.ceil(n / 2)))   # batas per kelompok (mis. Pendidikan = Sekolah + TK + kampus)
 
     def jauh_dari_terpilih(i, chosen):
         if not chosen:
@@ -771,16 +773,17 @@ def pilih_tersebar(cand, n, min_sep_m):
         a = np.sin((lat[c] - lat[i]) / 2) ** 2 + np.cos(lat[i]) * np.cos(lat[c]) * np.sin((lon[c] - lon[i]) / 2) ** 2
         return not (2 * EARTH * np.arcsin(np.sqrt(a)) < min_sep_m).any()
 
-    chosen, count = [], {}
-    for batas in (cap, None):      # putaran 1: dengan batas per kelompok; putaran 2: isi sisa tanpa batas
+    chosen, count, count_j = [], {}, {}
+    for batas in (True, False):    # putaran 1: dengan batas per jenis dan kelompok; putaran 2: isi sisa tanpa batas
         for i in range(len(cand)):
             if len(chosen) >= n:
                 break
-            if i in chosen or (batas is not None and count.get(grp[i], 0) >= batas):
+            if i in chosen or (batas and (count.get(grp[i], 0) >= cap_grup or count_j.get(jns[i], 0) >= cap_jenis)):
                 continue
             if jauh_dari_terpilih(i, chosen):
                 chosen.append(i)
                 count[grp[i]] = count.get(grp[i], 0) + 1
+                count_j[jns[i]] = count_j.get(jns[i], 0) + 1
     chosen.sort()                  # pertahankan urutan prioritas
     return cand.iloc[chosen]
 
@@ -966,6 +969,10 @@ else:
     base["selisih"] = base["biasanya"] - base["merchant_sekitar"]
     base["skor"] = base["selisih"] / np.sqrt(base["biasanya"].clip(lower=1))   # selisih relatif terhadap skala jenis tempatnya
     base["jenis"] = base["kategori"].map(KAT_ID)
+    # Peringkat di dalam jenisnya sendiri: 0.99 = termasuk 1% paling kekurangan merchant dibanding tempat sejenis.
+    # (rank - 0.5) / jumlah: jenis yang tempatnya sedikit tidak otomatis menempati puncak.
+    grp_rank = base.groupby("kategori")["skor"].rank(method="average")
+    base["peringkat"] = (grp_rank - 0.5) / base.groupby("kategori")["skor"].transform("count")
     ref_table = (
         base[base["jenis"].notna()].groupby("jenis")
         .agg(**{"Jumlah tempat": ("kategori", "size"), "Rata-rata merchant sekitar": ("merchant_sekitar", "mean"),
@@ -973,7 +980,7 @@ else:
         .round(1).sort_values("Jumlah tempat", ascending=False).reset_index().rename(columns={"jenis": "Jenis tempat"})
     )
     cand = base[base["jenis"].notna() & (base["selisih"] > 0) & (base["biasanya"] >= min_eks)]
-    cand = cand.sort_values(["skor", "selisih"], ascending=False)
+    cand = cand.sort_values(["peringkat", "skor", "selisih"], ascending=False)
     if cand.empty:
         alasan_kosong = "Tidak ada tempat yang merchant-nya jauh di bawah kebiasaan tempat serupa dengan pengaturan sekarang."
 
