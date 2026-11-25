@@ -1225,14 +1225,14 @@ with tab_daftar:
                 st.markdown("Merchant paling sering berada dekat: **" + kalimat + "** dibanding titik acak di area yang sama.")
             st.bar_chart(pola.set_index("Jenis tempat")[["Lift"]].rename(columns={"Lift": "Kali lebih ramai dari titik acak"}))
             st.caption(
-                "Angka 1 = sama dengan titik acak, 2 = dua kali lebih ramai merchant. Ini hubungan, bukan sebab-akibat: "
-                "sekolah bisa tampak menarik merchant hanya karena berada di permukiman padat."
+                # "Angka 1 = sama dengan titik acak, 2 = dua kali lebih ramai merchant. Ini hubungan, bukan sebab-akibat: "
+                # "sekolah bisa tampak menarik merchant hanya karena berada di permukiman padat."
             )
 
-    with st.expander("Bahan pembanding: biasanya ada berapa merchant di sekitar tiap jenis tempat?"):
-        if ref_table is None or ref_table.empty:
-            st.info("Belum tersedia (butuh data tempat ramai dan minimal 30 merchant).")
-        else:
-            st.caption("'Biasanya' adalah angka pembanding untuk menilai apakah suatu titik kekurangan merchant. "
-                       "Kalau angkanya terlihat janggal untuk satu jenis tempat, urutan prioritas jenis itu perlu dicurigai.")
-            st.dataframe(ref_table, hide_index=True)
+    # with st.expander("Bahan pembanding: biasanya ada berapa merchant di sekitar tiap jenis tempat?"):
+    #     if ref_table is None or ref_table.empty:
+    #         st.info("Belum tersedia (butuh data tempat ramai dan minimal 30 merchant).")
+    #     else:
+    #         st.caption("'Biasanya' adalah angka pembanding untuk menilai apakah suatu titik kekurangan merchant. "
+    #                    "Kalau angkanya terlihat janggal untuk satu jenis tempat, urutan prioritas jenis itu perlu dicurigai.")
+    #         st.dataframe(ref_table, hide_index=True)
