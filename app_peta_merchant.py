@@ -360,7 +360,7 @@ else:
 
 # ---------------- Judul & ringkasan ----------------
 st.title("Peta Potensi Merchant - Pulogadung")
-st.caption("Lihat di mana merchant sudah ada, dan di titik mana (sekolah, pabrik, pasar, dll) merchant masih jauh lebih sedikit dari seharusnya.")
+# st.caption("Lihat di mana merchant sudah ada, dan di titik mana (sekolah, pabrik, pasar, dll) merchant masih jauh lebih sedikit dari seharusnya.")
 
 total = len(df)
 n_aktif = int((df["status"] == "Aktif").sum())
@@ -447,11 +447,11 @@ with tab_peta:
             m.fit_bounds([[min(pts_lat), min(pts_lon)], [max(pts_lat), max(pts_lon)]])
             st_folium(m, width=None, height=650, returned_objects=[])
 
-        if show_h:
-            st.markdown("<div class='gradbar'></div>", unsafe_allow_html=True)
-            st.caption("Kepadatan merchant yang sudah ada: kuning = sedikit, merah = banyak.")
-        if show_p and not sel.empty:
-            st.caption("Lingkaran biru putus-putus = radius " + str(r_m) + " m di sekitar titik potensial.")
+        # if show_h:
+        #     st.markdown("<div class='gradbar'></div>", unsafe_allow_html=True)
+        #     st.caption("Kepadatan merchant yang sudah ada: kuning = sedikit, merah = banyak.")
+        # if show_p and not sel.empty:
+        #     st.caption("Lingkaran biru putus-putus = radius " + str(r_m) + " m di sekitar titik potensial.")
 
     with right:
         st.subheader("Titik potensial")
@@ -474,19 +474,19 @@ with tab_peta:
                         tombol.button("🔍", key="fokus_" + str(rank), on_click=set_fokus,
                                       args=(r.latitude, r.longitude), help="Lihat")
 
-    with st.expander("Cara membaca"):
-        st.markdown(
-            "- **Titik potensial** adalah jangkar keramaian (sekolah, pabrik, pasar, kantor, rumah sakit, dll) yang merchant di sekitarnya "
-            "**lebih sedikit** daripada tempat sejenis lainnya di area ini. Selisih dinilai relatif terhadap kebiasaan jenis tempatnya "
-            "(mal yang biasanya 20 merchant tidak otomatis mengalahkan sekolah yang biasanya 6), dan satu kelompok jenis tempat "
-            "dibatasi jumlahnya agar daftar bervariasi. Titik juga dipilih saling berjauhan.\n"
-            "- **Merchant** diberi warna: hijau = aktif (minimal " + str(min_active) + " transaksi dan sales lebih dari "
-            + format(min_sales, ",.0f") + " dalam 30 hari), oranye = menurun (ada transaksi, tapi di bawah ambang aktif, atau "
-            "transaksi turun lebih dari " + str(drop_pct) + "% dari rata-rata bulanan tahun ini), "
-            "merah = tidak ada transaksi dalam 30 hari.\n"
-            "- Ini perbandingan dengan kebiasaan tempat sejenis, **bukan jaminan** bahwa kunjungan akan menambah registrasi. "
-            "Area yang kosong, tertutup, atau sudah dijangkau cabang lain tidak terdeteksi otomatis. Cek di lapangan dan catat hasilnya."
-        )
+    # with st.expander("Cara membaca"):
+    #     st.markdown(
+    #         "- **Titik potensial** adalah jangkar keramaian (sekolah, pabrik, pasar, kantor, rumah sakit, dll) yang merchant di sekitarnya "
+    #         "**lebih sedikit** daripada tempat sejenis lainnya di area ini. Selisih dinilai relatif terhadap kebiasaan jenis tempatnya "
+    #         "(mal yang biasanya 20 merchant tidak otomatis mengalahkan sekolah yang biasanya 6), dan satu kelompok jenis tempat "
+    #         "dibatasi jumlahnya agar daftar bervariasi. Titik juga dipilih saling berjauhan.\n"
+    #         "- **Merchant** diberi warna: hijau = aktif (minimal " + str(min_active) + " transaksi dan sales lebih dari "
+    #         + format(min_sales, ",.0f") + " dalam 30 hari), oranye = menurun (ada transaksi, tapi di bawah ambang aktif, atau "
+    #         "transaksi turun lebih dari " + str(drop_pct) + "% dari rata-rata bulanan tahun ini), "
+    #         "merah = tidak ada transaksi dalam 30 hari.\n"
+    #         "- Ini perbandingan dengan kebiasaan tempat sejenis, **bukan jaminan** bahwa kunjungan akan menambah registrasi. "
+    #         "Area yang kosong, tertutup, atau sudah dijangkau cabang lain tidak terdeteksi otomatis. Cek di lapangan dan catat hasilnya."
+    #     )
 
 # ============================ HALAMAN 2: DAFTAR ============================
 with tab_daftar:
