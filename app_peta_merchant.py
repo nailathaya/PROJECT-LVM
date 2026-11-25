@@ -1396,10 +1396,15 @@ STATUS_COLOR = {
 # ============================================================
 
 KAT_ID = {
-    "school": "Sekolah",
-    "kindergarten": "TK / PAUD",
-    "college": "Perguruan tinggi",
-    "university": "Universitas",
+    "school": "Pendidikan",
+    "kindergarten": "Pendidikan",
+    "prep_school": "Pendidikan",
+    "college": "Pendidikan",
+    "university": "Pendidikan",
+    "educational_institution": "Pendidikan",
+    "language_school": "Pendidikan",
+    "library": "Pendidikan",
+
     "industrial": "Kawasan industri",
     "factory": "Pabrik",
     "works": "Pabrik",
@@ -1423,6 +1428,68 @@ KAT_ID = {
     "apartment": "Apartemen",
 }
 
+GROUPS = {
+    "Pendidikan": [
+        "school", "kindergarten", "prep_school", "college",
+        "university", "educational_institution",
+        "language_school", "library"
+    ],
+    "Tempat ibadah": ["place_of_worship"],
+    "Pemerintahan": [
+        "government", "police", "fire_station", "military",
+        "administrative", "post_office", "political_party",
+        "community_centre"
+    ],
+    "Kesehatan": [
+        "hospital", "clinic", "pharmacy", "doctors",
+        "dentist", "midwife", "chemist", "medical_supply",
+        "veterinary"
+    ],
+    "Industri & gudang": [
+        "industrial", "factory", "warehouse", "works",
+        "logistics", "depot", "storage_rental"
+    ],
+    "Kantor & komersial": [
+        "company", "office", "commercial",
+        "estate_agent", "insurance_agent"
+    ],
+    "Pasar & retail": [
+        "marketplace", "mall", "supermarket",
+        "department_store", "retail", "convenience",
+        "general", "variety_store", "hardware",
+        "doityourself", "kiosk", "greengrocer",
+        "grocery", "clothes", "shoes", "electronics",
+        "mobile_phone", "copyshop", "stationery"
+    ],
+    "Kuliner": [
+        "restaurant", "fast_food", "cafe", "coffee",
+        "food_court", "ice_cream", "pub", "bar",
+        "bakery", "pastry", "chocolate", "beverages",
+        "frozen", "alcohol"
+    ],
+    "Transportasi & otomotif": [
+        "bus_station", "fuel", "charging_station",
+        "car_repair", "car_wash", "car_parts",
+        "car", "motorcycle", "bicycle"
+    ],
+    "Bank & keuangan": [
+        "bank", "atm", "bureau_de_change"
+    ],
+    "Olahraga & rekreasi": [
+        "park", "sports_centre", "sports", "pitch",
+        "stadium", "swimming_pool", "fitness_centre",
+        "golf_course", "cinema", "amusement_arcade",
+        "nightclub"
+    ],
+    "Penginapan": [
+        "hotel", "guest_house", "apartment"
+    ],
+}
+
+CAT2GROUP = {
+    c: g for g, cats in GROUPS.items() for c in cats
+}
+
 NOISE = {
     "parking", "parking_entrance", "parking_space",
     "motorcycle_parking", "track", "toilets", "fountain",
@@ -1432,82 +1499,82 @@ NOISE = {
     "social_facility",
 }
 
-GROUPS = {
-    "Pendidikan": [
-        "school", "kindergarten", "prep_school", "college",
-        "university", "educational_institution",
-        "language_school", "library"
-    ],
+# GROUPS = {
+#     "Pendidikan": [
+#         "school", "kindergarten", "prep_school", "college",
+#         "university", "educational_institution",
+#         "language_school", "library"
+#     ],
 
-    "Tempat ibadah": [
-        "place_of_worship"
-    ],
+#     "Tempat ibadah": [
+#         "place_of_worship"
+#     ],
 
-    "Pemerintahan": [
-        "government", "police", "fire_station", "military",
-        "administrative", "post_office", "political_party",
-        "community_centre"
-    ],
+#     "Pemerintahan": [
+#         "government", "police", "fire_station", "military",
+#         "administrative", "post_office", "political_party",
+#         "community_centre"
+#     ],
 
-    "Kesehatan": [
-        "hospital", "clinic", "pharmacy", "doctors",
-        "dentist", "midwife", "chemist", "medical_supply",
-        "veterinary"
-    ],
+#     "Kesehatan": [
+#         "hospital", "clinic", "pharmacy", "doctors",
+#         "dentist", "midwife", "chemist", "medical_supply",
+#         "veterinary"
+#     ],
 
-    "Industri & gudang": [
-        "industrial", "factory", "warehouse", "works",
-        "logistics", "depot", "storage_rental"
-    ],
+#     "Industri & gudang": [
+#         "industrial", "factory", "warehouse", "works",
+#         "logistics", "depot", "storage_rental"
+#     ],
 
-    "Kantor & komersial": [
-        "company", "office", "commercial",
-        "estate_agent", "insurance_agent"
-    ],
+#     "Kantor & komersial": [
+#         "company", "office", "commercial",
+#         "estate_agent", "insurance_agent"
+#     ],
 
-    "Pasar & retail": [
-        "marketplace", "mall", "supermarket",
-        "department_store", "retail", "convenience",
-        "general", "variety_store", "hardware",
-        "doityourself", "kiosk", "greengrocer",
-        "grocery", "clothes", "shoes", "electronics",
-        "mobile_phone", "copyshop", "stationery"
-    ],
+#     "Pasar & retail": [
+#         "marketplace", "mall", "supermarket",
+#         "department_store", "retail", "convenience",
+#         "general", "variety_store", "hardware",
+#         "doityourself", "kiosk", "greengrocer",
+#         "grocery", "clothes", "shoes", "electronics",
+#         "mobile_phone", "copyshop", "stationery"
+#     ],
 
-    "Kuliner": [
-        "restaurant", "fast_food", "cafe", "coffee",
-        "food_court", "ice_cream", "pub", "bar",
-        "bakery", "pastry", "chocolate", "beverages",
-        "frozen", "alcohol"
-    ],
+#     "Kuliner": [
+#         "restaurant", "fast_food", "cafe", "coffee",
+#         "food_court", "ice_cream", "pub", "bar",
+#         "bakery", "pastry", "chocolate", "beverages",
+#         "frozen", "alcohol"
+#     ],
 
-    "Transportasi & otomotif": [
-        "bus_station", "fuel", "charging_station",
-        "car_repair", "car_wash", "car_parts",
-        "car", "motorcycle", "bicycle"
-    ],
+#     "Transportasi & otomotif": [
+#         "bus_station", "fuel", "charging_station",
+#         "car_repair", "car_wash", "car_parts",
+#         "car", "motorcycle", "bicycle"
+#     ],
 
-    "Bank & keuangan": [
-        "bank", "atm", "bureau_de_change"
-    ],
+#     "Bank & keuangan": [
+#         "bank", "atm", "bureau_de_change"
+#     ],
 
-    "Olahraga & rekreasi": [
-        "park", "sports_centre", "sports", "pitch",
-        "stadium", "swimming_pool", "fitness_centre",
-        "golf_course", "cinema", "amusement_arcade",
-        "nightclub"
-    ],
+#     "Olahraga & rekreasi": [
+#         "park", "sports_centre", "sports", "pitch",
+#         "stadium", "swimming_pool", "fitness_centre",
+#         "golf_course", "cinema", "amusement_arcade",
+#         "nightclub"
+#     ],
 
-    "Penginapan": [
-        "hotel", "guest_house", "apartment"
-    ],
-}
+#     "Penginapan": [
+#         "hotel", "guest_house", "apartment"
+#     ],
+# }
 
-CAT2GROUP = {
-    c: g
-    for g, cats in GROUPS.items()
-    for c in cats
-}
+# CAT2GROUP = {
+#     c: g
+#     for g, cats in GROUPS.items()
+#     for c in cats
+# }
 
 
 # ============================================================
