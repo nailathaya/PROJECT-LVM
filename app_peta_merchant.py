@@ -1,3 +1,569 @@
+# """
+# Peta Potensi Merchant - Pulogadung (versi sederhana, 2 halaman).
+
+#     pip install streamlit folium streamlit-folium scikit-learn pandas numpy openpyxl
+#     streamlit run app_peta_merchant.py
+
+# Taruh di folder yang sama:
+#     merchant_geocoded_filtered.csv   (atau merchant_df_area_pulogadung_filtered.csv; harus punya kolom latitude & longitude)
+#     poi_filtered.csv                 (osm_key, nama, kategori, latitude, longitude)
+# Atau upload lewat sidebar > "Ganti / upload data".
+# """
+
+# import datetime as dt
+# import html
+# import io
+# import os
+
+# import folium
+# import numpy as np
+# import pandas as pd
+# import streamlit as st
+# from folium.plugins import HeatMap
+# from sklearn.neighbors import BallTree
+# from streamlit_folium import st_folium
+
+# st.set_page_config(page_title="Peta Potensi Merchant", layout="wide")
+
+# st.markdown(
+#     """
+#     <style>
+#     .block-container {padding-top: 1.4rem; padding-bottom: 1rem;}
+#     div[data-testid="stMetric"] {
+#         background: rgba(128,128,128,0.10); border: 1px solid rgba(128,128,128,0.28);
+#         border-radius: 12px; padding: 12px 16px;
+#     }
+#     .kartu {border: 1px solid rgba(128,128,128,0.35); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px;}
+#     .nomor {display: inline-block; background: #1971c2; color: #fff; border-radius: 50%; width: 26px; height: 26px;
+#             text-align: center; line-height: 26px; margin-right: 8px; font-weight: 700; font-size: 0.9rem;}
+#     .kecil {opacity: 0.7; font-size: 0.85rem;}
+#     .legend span.dot {font-size: 20px; vertical-align: middle;}
+#     .legend {margin: 4px 0 8px 0; line-height: 2;}
+#     .badge {display: inline-block; background: #1971c2; color: #fff; border-radius: 50%; width: 20px; height: 20px;
+#             text-align: center; line-height: 20px; font-size: 11px; font-weight: 700; vertical-align: middle;}
+#     .gradbar {height: 12px; border-radius: 6px; background: linear-gradient(90deg, #ffffb2, #fd8d3c, #bd0026);}
+#     </style>
+#     """,
+#     unsafe_allow_html=True,
+# )
+
+# MERCHANT_FILES = ["merchant_geocoded_filtered.csv"]
+# DEFAULT_POI = "poi_filtered.csv"
+# EARTH = 6371000.0
+# GEO_OK = ["ok", "fallback_1", "fallback_2"]
+
+# STATUS_ORDER = ["Aktif", "Menurun", "Tidak aktif"]
+# STATUS_COLOR = {"Aktif": "#2f9e44", "Menurun": "#f08c00", "Tidak aktif": "#e03131"}
+
+# # Jenis tempat yang dianggap "jangkar" (penarik keramaian) beserta namanya dalam bahasa Indonesia.
+# KAT_ID = {
+#     "school": "Sekolah", "kindergarten": "TK / PAUD", "college": "Perguruan tinggi", "university": "Universitas",
+#     "industrial": "Kawasan industri", "factory": "Pabrik", "works": "Pabrik", "warehouse": "Gudang",
+#     "company": "Perusahaan", "office": "Kantor", "commercial": "Area komersial", "marketplace": "Pasar",
+#     "mall": "Mal", "supermarket": "Supermarket", "department_store": "Toserba", "retail": "Area ritel",
+#     "hospital": "Rumah sakit", "clinic": "Klinik", "bus_station": "Terminal / halte", "government": "Kantor pemerintah",
+#     "community_centre": "Balai warga", "stadium": "Stadion", "sports_centre": "Pusat olahraga", "hotel": "Hotel",
+#     "apartment": "Apartemen",
+# }
+
+# NOISE = {
+#     "parking", "parking_entrance", "parking_space", "motorcycle_parking", "track", "toilets", "fountain",
+#     "water", "ticket_validator", "bicycle_repair_station", "grave_yard", "garden", "playground",
+#     "horse_riding", "artwork", "outdoor", "alternative", "oil", "it", "social_facility",
+# }
+# GROUPS = {
+#     "Pendidikan": ["school", "kindergarten", "prep_school", "college", "university", "educational_institution", "language_school", "library"],
+#     "Tempat ibadah": ["place_of_worship"],
+#     "Pemerintahan": ["government", "police", "fire_station", "military", "administrative", "post_office", "political_party", "community_centre"],
+#     "Kesehatan": ["hospital", "clinic", "pharmacy", "doctors", "dentist", "midwife", "chemist", "medical_supply", "veterinary"],
+#     "Industri & gudang": ["industrial", "factory", "warehouse", "works", "logistics", "depot", "storage_rental"],
+#     "Kantor & komersial": ["company", "office", "commercial", "estate_agent", "insurance_agent"],
+#     "Pasar & retail": ["marketplace", "mall", "supermarket", "department_store", "retail", "convenience", "general", "variety_store",
+#                        "hardware", "doityourself", "kiosk", "greengrocer", "grocery", "clothes", "shoes", "electronics",
+#                        "mobile_phone", "copyshop", "stationery"],
+#     "Kuliner": ["restaurant", "fast_food", "cafe", "coffee", "food_court", "ice_cream", "pub", "bar", "bakery", "pastry",
+#                 "chocolate", "beverages", "frozen", "alcohol"],
+#     "Transportasi & otomotif": ["bus_station", "fuel", "charging_station", "car_repair", "car_wash", "car_parts", "car", "motorcycle", "bicycle"],
+#     "Bank & keuangan": ["bank", "atm", "bureau_de_change"],
+#     "Olahraga & rekreasi": ["park", "sports_centre", "sports", "pitch", "stadium", "swimming_pool", "fitness_centre", "golf_course",
+#                             "cinema", "amusement_arcade", "nightclub"],
+#     "Penginapan": ["hotel", "guest_house", "apartment"],
+# }
+# CAT2GROUP = {c: g for g, cats in GROUPS.items() for c in cats}
+
+
+# # ---------------- Fungsi bantu ----------------
+# def esc(x):
+#     return html.escape(str(x))
+
+
+# def guess(columns, candidates):
+#     lower = {c.lower().strip(): c for c in columns}
+#     for name in candidates:
+#         if name in lower:
+#             return lower[name]
+#     return None
+
+
+# def read_file(f):
+#     if f.name.lower().endswith(".csv"):
+#         return pd.read_csv(f)
+#     return pd.read_excel(f)
+
+
+# def rad(lat, lon):
+#     return np.radians(np.column_stack([np.asarray(lat, dtype=float), np.asarray(lon, dtype=float)]))
+
+
+# def count_within(q, t, r_m):
+#     if len(t) == 0:
+#         return np.zeros(len(q), dtype=int)
+#     return BallTree(t, metric="haversine").query_radius(q, r=r_m / EARTH, count_only=True)
+
+
+# def near(p_lat, p_lon, m_lat, m_lon, r_m, excl_m):
+#     """Jumlah merchant dalam r_m dari tiap POI. Merchant dalam excl_m meter (kemungkinan usaha yang sama dengan POI) tidak dihitung."""
+#     q, t = rad(p_lat, p_lon), rad(m_lat, m_lon)
+#     c = count_within(q, t, r_m)
+#     if excl_m > 0:
+#         c = c - count_within(q, t, excl_m)
+#     return np.clip(c, 0, None)
+
+
+# def gmaps(lat, lon):
+#     return "https://www.google.com/maps?q=" + str(lat) + "," + str(lon)
+
+
+# def pilih_tersebar(cand, n, min_sep_m):
+#     """Ambil n kandidat teratas yang saling berjauhan (min_sep_m) dan bervariasi: jumlah titik dari satu kelompok
+#     jenis tempat dibatasi, supaya daftar tidak didominasi satu jenis saja (mis. rumah sakit atau mal)."""
+#     if cand.empty:
+#         return cand
+#     lat = np.radians(cand["latitude"].to_numpy())
+#     lon = np.radians(cand["longitude"].to_numpy())
+#     grp = cand["kelompok"].to_numpy()
+#     cap = max(2, int(np.ceil(n / 4)))
+
+#     def jauh_dari_terpilih(i, chosen):
+#         if not chosen:
+#             return True
+#         c = np.array(chosen)
+#         a = np.sin((lat[c] - lat[i]) / 2) ** 2 + np.cos(lat[i]) * np.cos(lat[c]) * np.sin((lon[c] - lon[i]) / 2) ** 2
+#         return not (2 * EARTH * np.arcsin(np.sqrt(a)) < min_sep_m).any()
+
+#     chosen, count = [], {}
+#     for batas in (cap, None):      # putaran 1: dengan batas per kelompok; putaran 2: isi sisa tanpa batas
+#         for i in range(len(cand)):
+#             if len(chosen) >= n:
+#                 break
+#             if i in chosen or (batas is not None and count.get(grp[i], 0) >= batas):
+#                 continue
+#             if jauh_dari_terpilih(i, chosen):
+#                 chosen.append(i)
+#                 count[grp[i]] = count.get(grp[i], 0) + 1
+#     chosen.sort()                  # pertahankan urutan prioritas
+#     return cand.iloc[chosen]
+
+
+# # ---------------- Sidebar ----------------
+# st.sidebar.title("Peta Potensi Merchant")
+# with st.sidebar.expander("Ganti / upload data"):
+#     mfile = st.file_uploader("Data merchant (CSV / Excel)", type=["csv", "xlsx", "xls"])
+#     pfile = st.file_uploader("Data POI OSM (CSV)", type=["csv"])
+#     rfile = st.file_uploader("Hasil model building_potensi.csv (opsional)", type=["csv"])
+
+# raw, src = None, None
+# try:
+#     if mfile is not None:
+#         raw, src = read_file(mfile), mfile.name
+#     else:
+#         for fn in MERCHANT_FILES:
+#             if os.path.exists(fn):
+#                 raw, src = pd.read_csv(fn), fn
+#                 break
+# except Exception as e:
+#     st.sidebar.error("File merchant tidak bisa dibaca: " + str(e))
+
+# if raw is None:
+#     st.title("Peta Potensi Merchant")
+#     st.info("Data merchant belum ditemukan. Taruh `" + MERCHANT_FILES[0] + "` di folder yang sama dengan aplikasi ini, "
+#             "atau upload lewat sidebar > Ganti / upload data.")
+#     st.stop()
+# cols = list(raw.columns)
+
+# poi_raw = None
+# try:
+#     if pfile is not None:
+#         poi_raw = pd.read_csv(pfile)
+#     elif os.path.exists(DEFAULT_POI):
+#         poi_raw = pd.read_csv(DEFAULT_POI)
+# except Exception as e:
+#     st.sidebar.error("File POI tidak bisa dibaca: " + str(e))
+
+# lat_col = guess(cols, ["latitude", "lat", "lintang", "geo_lat"])
+# lon_col = guess(cols, ["longitude", "lon", "lng", "long", "bujur", "geo_lon"])
+# if not lat_col or not lon_col:
+#     st.title("Peta Potensi Merchant")
+#     st.error("Data merchant belum punya kolom koordinat (latitude dan longitude), jadi belum bisa dipetakan.")
+#     st.markdown(
+#         "Kolom yang terbaca: `" + "`, `".join(cols[:25]) + "`" + (" ..." if len(cols) > 25 else "") + "\n\n"
+#         "**Langkah:** lakukan geocoding kolom `address` dulu, simpan hasilnya sebagai CSV yang memuat kolom `latitude` dan "
+#         "`longitude` (serta `geocode_status` bila ada), lalu taruh di folder ini atau upload di sidebar."
+#     )
+#     st.stop()
+
+# geo_col = guess(cols, ["geocode_status"])
+# id_col = guess(cols, ["store_id", "merchant_id", "mid", "id"])
+# nama_col = guess(cols, ["store_name", "nama_merchant", "nama", "name"])
+# kat_col = guess(cols, ["lob_lm", "kategori", "category", "jenis_usaha"])
+# cab_col = guess(cols, ["nama_cabang_final", "cabang", "branch"])
+# f30_col = guess(cols, ["freq_30_days", "frek_30", "trx_30"])
+# s30_col = guess(cols, ["sv_30_days", "sales_30", "nominal_30"])
+# fytd_col = guess(cols, ["freq_ytd", "frek_ytd", "trx_ytd"])
+# sytd_col = guess(cols, ["sv_ytd", "sales_ytd", "nominal_ytd"])
+
+# today = dt.date.today()
+# default_months = round(max(1.0, today.month - 1 + today.day / 30), 1)
+# with st.sidebar.expander("Pengaturan lanjutan"):
+#     st.caption("Biasanya tidak perlu diubah.")
+#     months = st.number_input("Jumlah bulan berjalan di data YTD", 1.0, 12.0, float(default_months), 0.1)
+#     min_active = st.number_input("Minimal transaksi 30 hari agar disebut Aktif", 1, 1000, 5)
+#     drop_pct = st.slider("Penurunan dianggap tajam (%)", 10, 90, 50)
+#     r_m = st.slider("Radius jangkar (meter)", 100, 500, 500, 50)
+#     min_sep = st.slider("Jarak minimal antar titik potensial (meter)", 100, 1000, 300, 50)
+#     min_eks = st.number_input("Merchant yang 'biasanya' ada di tempat serupa, minimal", 0.0, 50.0, 1.0, 0.5)
+#     only_geo_ok = st.checkbox("Hanya titik geocode yang layak", value=True, disabled=geo_col is None)
+
+# if not geo_col:
+#     only_geo_ok = False
+
+
+# # ---------------- Susun data merchant ----------------
+# def num(c):
+#     if c:
+#         return pd.to_numeric(raw[c], errors="coerce").fillna(0)
+#     return pd.Series(0.0, index=raw.index)
+
+
+# def text(c, default):
+#     if c:
+#         return raw[c].fillna("-").astype(str)
+#     return pd.Series(default, index=raw.index)
+
+
+# f30, fytd = num(f30_col), num(fytd_col)
+# avg_month = fytd / months
+# sharp = (avg_month > 0) & (f30 < avg_month * (1 - drop_pct / 100))
+# low = (f30 > 0) & (f30 < min_active)
+# status = np.select([f30 <= 0, sharp | low], [STATUS_ORDER[2], STATUS_ORDER[1]], default=STATUS_ORDER[0])
+
+# df = pd.DataFrame(
+#     {
+#         "id": raw[id_col].astype(str) if id_col else raw.index.astype(str),
+#         "nama": text(nama_col, "(tanpa nama)"),
+#         "kategori": text(kat_col, "-"),
+#         "cabang": text(cab_col, "-"),
+#         "geocode": text(geo_col, "-"),
+#         "lat": pd.to_numeric(raw[lat_col], errors="coerce"),
+#         "lon": pd.to_numeric(raw[lon_col], errors="coerce"),
+#         "frek_30": f30,
+#         "sv_30": num(s30_col),
+#         "frek_ytd": fytd,
+#         "sv_ytd": num(sytd_col),
+#         "status": status,
+#     }
+# )
+# n_raw = len(df)
+# df = df.dropna(subset=["lat", "lon"])
+# df = df[df["lat"].between(-90, 90) & df["lon"].between(-180, 180)]
+# if only_geo_ok:
+#     df = df[df["geocode"].isin(GEO_OK)]
+# if df.empty:
+#     st.error("Tidak ada titik koordinat yang layak untuk dipetakan.")
+#     st.stop()
+# st.sidebar.caption("Merchant: " + src + " | dipetakan " + format(len(df), ",") + " dari " + format(n_raw, ",") + " baris")
+
+# # ---------------- Siapkan POI ----------------
+# poi = None
+# if poi_raw is not None:
+#     if {"latitude", "longitude", "kategori"}.issubset(set(poi_raw.columns)):
+#         poi = poi_raw.copy()
+#         poi["latitude"] = pd.to_numeric(poi["latitude"], errors="coerce")
+#         poi["longitude"] = pd.to_numeric(poi["longitude"], errors="coerce")
+#         poi = poi.dropna(subset=["latitude", "longitude", "kategori"])
+#         poi = poi[~poi["kategori"].isin(NOISE)].reset_index(drop=True)
+#         if "nama" not in poi.columns:
+#             poi["nama"] = ""
+#         poi["nama"] = poi["nama"].fillna("").astype(str)
+#         if "osm_key" not in poi.columns:
+#             poi["osm_key"] = "idx/" + poi.index.astype(str)
+#         poi["kelompok"] = poi["kategori"].map(CAT2GROUP).fillna("Lainnya")
+#         if poi.empty:
+#             poi = None
+#     else:
+#         st.sidebar.error("File POI harus punya kolom: latitude, longitude, kategori.")
+
+# # ---------------- Hitung kandidat titik potensial ----------------
+# cand = pd.DataFrame()
+# ref_table = None
+# alasan_kosong = ""
+# if poi is None:
+#     alasan_kosong = "Data POI (poi_filtered.csv) belum tersedia."
+# elif len(df) < 30:
+#     alasan_kosong = "Merchant yang dipetakan kurang dari 30, terlalu sedikit untuk membandingkan."
+# else:
+#     base = poi.copy()
+#     base["merchant_sekitar"] = near(base["latitude"].to_numpy(), base["longitude"].to_numpy(),
+#                                     df["lat"].to_numpy(), df["lon"].to_numpy(), r_m, 30)
+#     mu_all = float(base["merchant_sekitar"].mean())
+#     g = base.groupby("kategori")["merchant_sekitar"].agg(["sum", "count"])
+#     mu = (g["sum"] + 10 * mu_all) / (g["count"] + 10)       # rata-rata sekategori, disusutkan ke rata-rata umum
+#     base["biasanya"] = base["kategori"].map(mu)
+#     pakai_model = False
+#     if rfile is not None:
+#         try:
+#             res = pd.read_csv(rfile)
+#             if {"osm_key", "ekspektasi"}.issubset(set(res.columns)):
+#                 base = base.merge(res[["osm_key", "ekspektasi"]], on="osm_key", how="left")
+#                 base["biasanya"] = base["ekspektasi"].fillna(base["biasanya"])
+#                 pakai_model = True
+#             else:
+#                 st.sidebar.warning("File hasil model harus punya kolom osm_key dan ekspektasi.")
+#         except Exception as e:
+#             st.sidebar.warning("File hasil model tidak bisa dibaca: " + str(e))
+#     base["selisih"] = base["biasanya"] - base["merchant_sekitar"]
+#     base["skor"] = base["selisih"] / np.sqrt(base["biasanya"].clip(lower=1))   # selisih relatif terhadap skala jenis tempatnya
+#     base["jenis"] = base["kategori"].map(KAT_ID)
+#     ref_table = (
+#         base[base["jenis"].notna()].groupby("jenis")
+#         .agg(**{"Jumlah tempat": ("kategori", "size"), "Rata-rata merchant sekitar": ("merchant_sekitar", "mean"),
+#                 "Biasanya": ("biasanya", "mean")})
+#         .round(1).sort_values("Jumlah tempat", ascending=False).reset_index().rename(columns={"jenis": "Jenis tempat"})
+#     )
+#     cand = base[base["jenis"].notna() & (base["selisih"] > 0) & (base["biasanya"] >= min_eks)]
+#     cand = cand.sort_values(["skor", "selisih"], ascending=False)
+#     if cand.empty:
+#         alasan_kosong = "Tidak ada jangkar yang merchant-nya jauh di bawah kebiasaan tempat serupa dengan pengaturan sekarang."
+
+# # ---------------- Judul & ringkasan ----------------
+# st.title("Peta Potensi Merchant - Pulogadung")
+# st.caption("Lihat di mana merchant sudah ada, dan di titik mana (sekolah, pabrik, pasar, dll) merchant masih jauh lebih sedikit dari seharusnya.")
+
+# total = len(df)
+# n_aktif = int((df["status"] == "Aktif").sum())
+# k1, k2, k3, k4 = st.columns(4)
+# k1.metric("Total merchant", format(total, ","))
+# k2.metric("Aktif", format(n_aktif, ","), format(n_aktif / total * 100, ".0f") + "% dari total", delta_color="off")
+# k3.metric("Perlu ditindaklanjuti", format(total - n_aktif, ","), "menurun atau tidak aktif", delta_color="off")
+# k4.metric("Sales 30 hari", format(df["sv_30"].sum(), ",.0f"))
+
+# tab_peta, tab_daftar = st.tabs(["Peta", "Daftar kunjungan"])
+
+# # ============================ HALAMAN 1: PETA ============================
+# with tab_peta:
+#     c1, c2, c3, c4 = st.columns([1, 1.3, 1.5, 2])
+#     show_m = c1.checkbox("Merchant", value=True)
+#     show_p = c2.checkbox("Titik potensial", value=True, disabled=cand.empty)
+#     show_h = c3.checkbox("Kepadatan merchant", value=False, help="Warna hangat = banyak merchant yang SUDAH ada. Bukan potensi.")
+#     n_pot = c4.slider("Jumlah titik potensial", 5, 30, 10)
+
+#     sel = pilih_tersebar(cand, n_pot, min_sep) if not cand.empty else cand
+
+#     legend = " &nbsp;&nbsp; ".join(
+#         "<span class='dot' style='color:" + STATUS_COLOR[s] + "'>&#9679;</span> Merchant " + s.lower() for s in STATUS_ORDER
+#     )
+#     legend += " &nbsp;&nbsp; <span class='badge'>1</span> Titik potensial (urut prioritas)"
+#     st.markdown("<div class='legend'>" + legend + "</div>", unsafe_allow_html=True)
+
+#     left, right = st.columns([3, 1.35])
+
+#     with left:
+#         center = [df["lat"].mean(), df["lon"].mean()]
+#         m = folium.Map(location=center, zoom_start=14, tiles="OpenStreetMap", control_scale=True)
+
+#         if show_h:
+#             HeatMap(df[["lat", "lon"]].values.tolist(), radius=25, blur=20, min_opacity=0.3,
+#                     gradient={0.2: "#ffffb2", 0.5: "#fd8d3c", 1.0: "#bd0026"}).add_to(m)
+
+#         if show_m:
+#             for r in df.itertuples():
+#                 color = STATUS_COLOR[r.status]
+#                 popup = (
+#                     "<b>" + esc(r.nama) + "</b><br>" + esc(r.kategori) + "<br>Status: <b>" + r.status + "</b>"
+#                     + "<br>Transaksi 30 hari: " + format(r.frek_30, ",.0f")
+#                     + "<br>Sales 30 hari: " + format(r.sv_30, ",.0f")
+#                     + "<br><a href='" + gmaps(r.lat, r.lon) + "' target='_blank'>Buka di Google Maps</a>"
+#                 )
+#                 folium.CircleMarker(
+#                     location=[r.lat, r.lon], radius=5, color="#ffffff", weight=1, fill=True, fill_color=color,
+#                     fill_opacity=0.9, tooltip=esc(r.nama) + " - " + r.status, popup=folium.Popup(popup, max_width=280),
+#                 ).add_to(m)
+
+#         if show_p and not sel.empty:
+#             for rank, r in enumerate(sel.itertuples(), 1):
+#                 judul = r.nama if r.nama.strip() else r.jenis + " (tanpa nama)"
+#                 popup = (
+#                     "<b>#" + str(rank) + " " + esc(judul) + "</b><br>" + esc(r.jenis)
+#                     + "<br>Merchant dalam " + str(r_m) + " m: <b>" + format(r.merchant_sekitar, ",.0f") + "</b>"
+#                     + "<br>Tempat serupa biasanya: <b>" + format(r.biasanya, ".0f") + "</b>"
+#                     + "<br><a href='" + gmaps(r.latitude, r.longitude) + "' target='_blank'>Buka di Google Maps</a>"
+#                 )
+#                 folium.Circle(
+#                     location=[r.latitude, r.longitude], radius=r_m, color="#1971c2", weight=2, dash_array="6",
+#                     fill=True, fill_color="#1971c2", fill_opacity=0.10,
+#                 ).add_to(m)
+#                 badge = (
+#                     "<div style='background:#1971c2;color:#fff;border:2px solid #fff;border-radius:50%;width:30px;height:30px;"
+#                     "line-height:26px;text-align:center;font-weight:700;font-size:14px;box-shadow:0 1px 5px rgba(0,0,0,.55)'>"
+#                     + str(rank) + "</div>"
+#                 )
+#                 folium.Marker(
+#                     location=[r.latitude, r.longitude],
+#                     icon=folium.DivIcon(html=badge, icon_size=(30, 30), icon_anchor=(15, 15)),
+#                     tooltip="#" + str(rank) + " " + esc(judul), popup=folium.Popup(popup, max_width=300),
+#                 ).add_to(m)
+
+#         pts_lat = list(df["lat"]) + (list(sel["latitude"]) if show_p and not sel.empty else [])
+#         pts_lon = list(df["lon"]) + (list(sel["longitude"]) if show_p and not sel.empty else [])
+#         m.fit_bounds([[min(pts_lat), min(pts_lon)], [max(pts_lat), max(pts_lon)]])
+#         st_folium(m, width=None, height=650, returned_objects=[])
+
+#         if show_h:
+#             st.markdown("<div class='gradbar'></div>", unsafe_allow_html=True)
+#             st.caption("Kepadatan merchant yang sudah ada: kuning = sedikit, merah = banyak.")
+#         if show_p and not sel.empty:
+#             st.caption("Lingkaran biru putus-putus = radius " + str(r_m) + " m di sekitar titik potensial.")
+
+#     with right:
+#         st.subheader("Titik potensial")
+#         if sel.empty:
+#             st.info(alasan_kosong or "Belum ada titik potensial.")
+#         else:
+#             with st.container(height=650):
+#                 cards = []
+#                 for rank, r in enumerate(sel.itertuples(), 1):
+#                     judul = r.nama if r.nama.strip() else r.jenis + " (tanpa nama)"
+#                     cards.append(
+#                         "<div class='kartu'><span class='nomor'>" + str(rank) + "</span><b>" + esc(judul) + "</b><br>"
+#                         "<span class='kecil'>" + esc(r.jenis) + "</span><br>"
+#                         "Baru <b>" + format(r.merchant_sekitar, ",.0f") + "</b> merchant dalam " + str(r_m) + " m, "
+#                         "tempat serupa biasanya sekitar <b>" + format(r.biasanya, ".0f") + "</b>.<br>"
+#                         "<a href='" + gmaps(r.latitude, r.longitude) + "' target='_blank'>Buka di Google Maps</a></div>"
+#                     )
+#                 st.markdown("".join(cards), unsafe_allow_html=True)
+
+#     with st.expander("Cara membaca"):
+#         st.markdown(
+#             "- **Titik potensial** adalah jangkar keramaian (sekolah, pabrik, pasar, kantor, rumah sakit, dll) yang merchant di sekitarnya "
+#             "**lebih sedikit** daripada tempat sejenis lainnya di area ini. Selisih dinilai relatif terhadap kebiasaan jenis tempatnya "
+#             "(mal yang biasanya 20 merchant tidak otomatis mengalahkan sekolah yang biasanya 6), dan satu kelompok jenis tempat "
+#             "dibatasi jumlahnya agar daftar bervariasi. Titik juga dipilih saling berjauhan.\n"
+#             "- **Merchant** diberi warna: hijau = aktif (minimal " + str(min_active) + " transaksi dalam 30 hari), oranye = menurun "
+#             "(transaksi turun lebih dari " + str(drop_pct) + "% dari rata-rata bulanan tahun ini, atau di bawah " + str(min_active)
+#             + "), merah = tidak ada transaksi dalam 30 hari.\n"
+#             "- Ini perbandingan dengan kebiasaan tempat sejenis, **bukan jaminan** bahwa kunjungan akan menambah registrasi. "
+#             "Area yang kosong, tertutup, atau sudah dijangkau cabang lain tidak terdeteksi otomatis. Cek di lapangan dan catat hasilnya."
+#         )
+
+# # ============================ HALAMAN 2: DAFTAR ============================
+# with tab_daftar:
+#     st.subheader("1. Titik potensial untuk dikunjungi")
+#     if sel.empty:
+#         st.info(alasan_kosong or "Belum ada titik potensial.")
+#     else:
+#         t1 = sel.copy().reset_index(drop=True)
+#         t1.insert(0, "Prioritas", range(1, len(t1) + 1))
+#         t1["Nama"] = [(n if n.strip() else j + " (tanpa nama)") for n, j in zip(t1["nama"], t1["jenis"])]
+#         t1["Alasan"] = ["Baru " + format(a, ".0f") + " merchant dalam " + str(r_m) + " m, biasanya sekitar " + format(b, ".0f")
+#                         for a, b in zip(t1["merchant_sekitar"], t1["biasanya"])]
+#         t1["Peta"] = [gmaps(a, b) for a, b in zip(t1["latitude"], t1["longitude"])]
+#         show1 = t1[["Prioritas", "Nama", "jenis", "merchant_sekitar", "biasanya", "Alasan", "Peta"]].rename(
+#             columns={"jenis": "Jenis tempat", "merchant_sekitar": "Merchant di sekitar", "biasanya": "Biasanya"})
+#         show1["Biasanya"] = show1["Biasanya"].round(0)
+#         st.dataframe(show1, hide_index=True, column_config={"Peta": st.column_config.LinkColumn("Peta", display_text="Buka")})
+#         out = io.StringIO()
+#         show1.to_csv(out, index=False)
+#         st.download_button("Unduh daftar titik potensial (CSV)", out.getvalue(), "titik_potensial.csv", "text/csv")
+
+#     st.subheader("2. Merchant yang perlu ditindaklanjuti")
+#     st.caption("Diurutkan dari sales YTD terbesar: merchant yang dulu bernilai besar dan sekarang turun atau berhenti ada di atas.")
+#     t2 = df[df["status"] != "Aktif"].copy()
+#     if t2.empty:
+#         st.success("Semua merchant berstatus aktif.")
+#     else:
+#         t2["Tindakan"] = np.where(
+#             t2["status"] == "Menurun", "Kunjungi, tanyakan kendala transaksi",
+#             np.where(t2["frek_ytd"] <= 0, "Aktivasi: bantu transaksi pertama", "Hubungi, pastikan usaha masih beroperasi"),
+#         )
+#         t2["Peta"] = [gmaps(a, b) for a, b in zip(t2["lat"], t2["lon"])]
+#         t2 = t2.sort_values("sv_ytd", ascending=False)
+#         show2 = t2[["nama", "kategori", "cabang", "status", "frek_30", "sv_ytd", "Tindakan", "Peta"]].rename(
+#             columns={"nama": "Nama", "kategori": "Kategori usaha", "cabang": "Cabang", "status": "Status",
+#                      "frek_30": "Trx 30 hari", "sv_ytd": "Sales YTD"})
+#         st.dataframe(show2.head(200), hide_index=True, column_config={"Peta": st.column_config.LinkColumn("Peta", display_text="Buka")})
+#         out = io.StringIO()
+#         show2.to_csv(out, index=False)
+#         st.download_button("Unduh daftar merchant (CSV)", out.getvalue(), "merchant_tindak_lanjut.csv", "text/csv")
+
+#     st.subheader("3. Pola: merchant paling banyak berada dekat jenis tempat apa?")
+
+#     @st.cache_data(show_spinner=False)
+#     def background_points(p_lat, p_lon, m_lat, m_lon, n=3000, max_d=1000):
+#         rng = np.random.default_rng(42)
+#         lat = np.concatenate([p_lat, m_lat])
+#         lon = np.concatenate([p_lon, m_lon])
+#         cl = rng.uniform(lat.min(), lat.max(), n * 5)
+#         co = rng.uniform(lon.min(), lon.max(), n * 5)
+#         d, _ = BallTree(rad(lat, lon), metric="haversine").query(rad(cl, co), k=1)
+#         keep = d[:, 0] * EARTH <= max_d
+#         cl, co = cl[keep], co[keep]
+#         idx = rng.permutation(len(cl))[:n]
+#         return cl[idx], co[idx]
+
+#     @st.cache_data(show_spinner=False)
+#     def lift_per_kelompok(p_lat, p_lon, p_grp, m_lat, m_lon, b_lat, b_lon, r, min_n=10):
+#         bg_mean = count_within(rad(b_lat, b_lon), rad(m_lat, m_lon), r).mean()
+#         if not bg_mean > 0:
+#             return pd.DataFrame()
+#         cnt = near(p_lat, p_lon, m_lat, m_lon, r, 30)
+#         grp = np.array(p_grp)
+#         rows = []
+#         for gname in np.unique(grp):
+#             a = cnt[grp == gname]
+#             if len(a) >= min_n:
+#                 rows.append({"Jenis tempat": gname, "Jumlah tempat": int(len(a)), "Lift": round(float(a.mean() / bg_mean), 2)})
+#         if not rows:
+#             return pd.DataFrame()
+#         return pd.DataFrame(rows).sort_values("Lift", ascending=False).reset_index(drop=True)
+
+#     if poi is None or len(df) < 30:
+#         st.info("Butuh data POI dan minimal 30 merchant untuk melihat pola.")
+#     else:
+#         b_lat, b_lon = background_points(poi["latitude"].to_numpy(), poi["longitude"].to_numpy(), df["lat"].to_numpy(), df["lon"].to_numpy())
+#         pola = lift_per_kelompok(poi["latitude"].to_numpy(), poi["longitude"].to_numpy(), poi["kelompok"].tolist(),
+#                                  df["lat"].to_numpy(), df["lon"].to_numpy(), b_lat, b_lon, r_m)
+#         if pola.empty:
+#             st.info("Pola belum bisa dihitung dengan data ini.")
+#         else:
+#             atas = pola[pola["Lift"] > 1].head(3)
+#             if not atas.empty:
+#                 kalimat = ", ".join(a + " (" + format(b, ".1f") + "x)" for a, b in zip(atas["Jenis tempat"], atas["Lift"]))
+#                 st.markdown("Merchant paling sering berada dekat: **" + kalimat + "** dibanding titik acak di area yang sama.")
+#             st.bar_chart(pola.set_index("Jenis tempat")["Lift"])
+#             st.caption(
+#                 "Angka 1 = sama dengan titik acak, 2 = dua kali lebih ramai merchant. Ini asosiasi, bukan sebab: "
+#                 "sekolah bisa tampak menarik merchant hanya karena berada di permukiman padat, dan sebaran merchant "
+#                 "mencerminkan di mana sales pernah bekerja."
+#             )
+
+#     with st.expander("Bahan pembanding: biasanya ada berapa merchant di sekitar tiap jenis tempat?"):
+#         if ref_table is None or ref_table.empty:
+#             st.info("Belum tersedia (butuh data POI dan minimal 30 merchant).")
+#         else:
+#             st.caption("'Biasanya' adalah angka pembanding untuk menilai apakah suatu titik kekurangan merchant. "
+#                        "Kalau angkanya terlihat janggal untuk satu jenis tempat, urutan prioritas jenis itu perlu dicurigai.")
+#             st.dataframe(ref_table, hide_index=True)
+        
 """
 Peta Potensi Merchant - Pulogadung (versi sederhana, 2 halaman).
 
@@ -19,7 +585,6 @@ import folium
 import numpy as np
 import pandas as pd
 import streamlit as st
-from folium.plugins import HeatMap
 from sklearn.neighbors import BallTree
 from streamlit_folium import st_folium
 
@@ -51,6 +616,8 @@ MERCHANT_FILES = ["merchant_geocoded_filtered.csv"]
 DEFAULT_POI = "poi_filtered.csv"
 EARTH = 6371000.0
 GEO_OK = ["ok", "fallback_1", "fallback_2"]
+ZOOM_FOKUS = 17          # level zoom peta saat titik potensial diklik
+HEAT_COLORS = [(0.0, (255, 255, 178)), (0.5, (253, 141, 60)), (1.0, (189, 0, 38))]
 
 STATUS_ORDER = ["Aktif", "Menurun", "Tidak aktif"]
 STATUS_COLOR = {"Aktif": "#2f9e44", "Menurun": "#f08c00", "Tidak aktif": "#e03131"}
@@ -165,6 +732,54 @@ def pilih_tersebar(cand, n, min_sep_m):
     return cand.iloc[chosen]
 
 
+def heat_color(t):
+    t = min(max(float(t), 0.0), 1.0)
+    for (a, ca), (b, cb) in zip(HEAT_COLORS[:-1], HEAT_COLORS[1:]):
+        if t <= b:
+            f = (t - a) / (b - a)
+            return "#%02x%02x%02x" % tuple(int(round(x + (y - x) * f)) for x, y in zip(ca, cb))
+    return "#bd0026"
+
+
+@st.cache_data(show_spinner=False)
+def heat_geojson(m_lat, m_lon, r, max_cells=6000):
+    """Heatmap berbasis meter: area dibagi kotak-kotak (ukuran dalam meter), tiap kotak diwarnai menurut jumlah
+    merchant dalam radius r meter dari titik tengahnya. Karena kotaknya poligon peta (bukan piksel), ukurannya
+    ikut membesar/mengecil saat peta di-zoom."""
+    lat0 = float(np.mean(m_lat))
+    m_per_lat = 111320.0
+    m_per_lon = 111320.0 * np.cos(np.radians(lat0))
+    cell = max(r / 5.0, 50.0)
+    while True:
+        la = np.arange(m_lat.min() - r / m_per_lat, m_lat.max() + r / m_per_lat, cell / m_per_lat)
+        lo = np.arange(m_lon.min() - r / m_per_lon, m_lon.max() + r / m_per_lon, cell / m_per_lon)
+        if len(la) * len(lo) <= max_cells:
+            break
+        cell *= 1.25
+    hla, hlo = cell / m_per_lat / 2, cell / m_per_lon / 2
+    glat, glon = np.meshgrid(la + hla, lo + hlo, indexing="ij")
+    clat, clon = glat.ravel(), glon.ravel()
+    cnt = count_within(rad(clat, clon), rad(m_lat, m_lon), r)
+    cmax = int(cnt.max()) if len(cnt) else 0
+    feats = []
+    for a, b, n in zip(clat, clon, cnt):
+        if n <= 0:
+            continue
+        warna = heat_color(n / cmax)
+        ring = [[b - hlo, a - hla], [b + hlo, a - hla], [b + hlo, a + hla], [b - hlo, a + hla], [b - hlo, a - hla]]
+        feats.append({"type": "Feature", "properties": {"jumlah": int(n), "warna": warna},
+                      "geometry": {"type": "Polygon", "coordinates": [ring]}})
+    return {"type": "FeatureCollection", "features": feats}, cmax
+
+
+def set_fokus(lat, lon):
+    st.session_state["fokus"] = (float(lat), float(lon))
+
+
+def reset_fokus():
+    st.session_state["fokus"] = None
+
+
 # ---------------- Sidebar ----------------
 st.sidebar.title("Peta Potensi Merchant")
 with st.sidebar.expander("Ganti / upload data"):
@@ -230,6 +845,7 @@ with st.sidebar.expander("Pengaturan lanjutan"):
     min_active = st.number_input("Minimal transaksi 30 hari agar disebut Aktif", 1, 1000, 5)
     drop_pct = st.slider("Penurunan dianggap tajam (%)", 10, 90, 50)
     r_m = st.slider("Radius jangkar (meter)", 100, 500, 500, 50)
+    r_heat = st.slider("Radius heatmap kepadatan (meter)", 100, 1000, 500, 100)
     min_sep = st.slider("Jarak minimal antar titik potensial (meter)", 100, 1000, 300, 50)
     min_eks = st.number_input("Merchant yang 'biasanya' ada di tempat serupa, minimal", 0.0, 50.0, 1.0, 0.5)
     only_geo_ok = st.checkbox("Hanya titik geocode yang layak", value=True, disabled=geo_col is None)
@@ -364,7 +980,8 @@ with tab_peta:
     c1, c2, c3, c4 = st.columns([1, 1.3, 1.5, 2])
     show_m = c1.checkbox("Merchant", value=True)
     show_p = c2.checkbox("Titik potensial", value=True, disabled=cand.empty)
-    show_h = c3.checkbox("Kepadatan merchant", value=False, help="Warna hangat = banyak merchant yang SUDAH ada. Bukan potensi.")
+    show_h = c3.checkbox("Kepadatan merchant", value=False,
+                         help="Warna di tiap area = jumlah merchant yang SUDAH ada dalam radius heatmap dari titik itu. Bukan potensi.")
     n_pot = c4.slider("Jumlah titik potensial", 5, 30, 10)
 
     sel = pilih_tersebar(cand, n_pot, min_sep) if not cand.empty else cand
@@ -378,12 +995,21 @@ with tab_peta:
     left, right = st.columns([3, 1.35])
 
     with left:
+        fokus = st.session_state.get("fokus")
         center = [df["lat"].mean(), df["lon"].mean()]
-        m = folium.Map(location=center, zoom_start=14, tiles="OpenStreetMap", control_scale=True)
+        m = folium.Map(location=list(fokus) if fokus else center, zoom_start=ZOOM_FOKUS if fokus else 14,
+                       tiles="OpenStreetMap", control_scale=True)
 
+        heat_max = 0
         if show_h:
-            HeatMap(df[["lat", "lon"]].values.tolist(), radius=25, blur=20, min_opacity=0.3,
-                    gradient={0.2: "#ffffb2", 0.5: "#fd8d3c", 1.0: "#bd0026"}).add_to(m)
+            gj, heat_max = heat_geojson(df["lat"].to_numpy(), df["lon"].to_numpy(), r_heat)
+            if gj["features"]:
+                folium.GeoJson(
+                    gj,
+                    style_function=lambda f: {"fillColor": f["properties"]["warna"], "color": f["properties"]["warna"],
+                                              "weight": 0, "fillOpacity": 0.55},
+                    tooltip=folium.GeoJsonTooltip(fields=["jumlah"], aliases=["Merchant dalam " + str(r_heat) + " m:"]),
+                ).add_to(m)
 
         if show_m:
             for r in df.itertuples():
@@ -425,12 +1051,17 @@ with tab_peta:
 
         pts_lat = list(df["lat"]) + (list(sel["latitude"]) if show_p and not sel.empty else [])
         pts_lon = list(df["lon"]) + (list(sel["longitude"]) if show_p and not sel.empty else [])
-        m.fit_bounds([[min(pts_lat), min(pts_lon)], [max(pts_lat), max(pts_lon)]])
-        st_folium(m, width=None, height=650, returned_objects=[])
+        if fokus:
+            st_folium(m, width=None, height=650, returned_objects=[], center=list(fokus), zoom=ZOOM_FOKUS)
+        else:
+            m.fit_bounds([[min(pts_lat), min(pts_lon)], [max(pts_lat), max(pts_lon)]])
+            st_folium(m, width=None, height=650, returned_objects=[])
 
         if show_h:
             st.markdown("<div class='gradbar'></div>", unsafe_allow_html=True)
-            st.caption("Kepadatan merchant yang sudah ada: kuning = sedikit, merah = banyak.")
+            st.caption("Kepadatan merchant yang sudah ada, dihitung dalam radius " + str(r_heat) + " m dari tiap titik "
+                       "(kuning = sedikit, merah = banyak, maksimum " + str(heat_max) + " merchant). Ukuran area mengikuti "
+                       "skala peta, jadi ikut membesar saat di-zoom. Arahkan kursor ke area untuk melihat jumlahnya.")
         if show_p and not sel.empty:
             st.caption("Lingkaran biru putus-putus = radius " + str(r_m) + " m di sekitar titik potensial.")
 
@@ -439,18 +1070,15 @@ with tab_peta:
         if sel.empty:
             st.info(alasan_kosong or "Belum ada titik potensial.")
         else:
-            with st.container(height=650):
-                cards = []
+            if st.session_state.get("fokus"):
+                st.button("Kembali ke peta penuh", on_click=reset_fokus, use_container_width=True)
+            with st.container(height=600):
                 for rank, r in enumerate(sel.itertuples(), 1):
                     judul = r.nama if r.nama.strip() else r.jenis + " (tanpa nama)"
-                    cards.append(
-                        "<div class='kartu'><span class='nomor'>" + str(rank) + "</span><b>" + esc(judul) + "</b><br>"
-                        "<span class='kecil'>" + esc(r.jenis) + "</span><br>"
-                        "Baru <b>" + format(r.merchant_sekitar, ",.0f") + "</b> merchant dalam " + str(r_m) + " m, "
-                        "tempat serupa biasanya sekitar <b>" + format(r.biasanya, ".0f") + "</b>.<br>"
-                        "<a href='" + gmaps(r.latitude, r.longitude) + "' target='_blank'>Buka di Google Maps</a></div>"
-                    )
-                st.markdown("".join(cards), unsafe_allow_html=True)
+                    with st.container(border=True):
+                        st.button(str(rank) + ". " + judul, key="fokus_" + str(rank), use_container_width=True,
+                                  on_click=set_fokus, args=(r.latitude, r.longitude), help="Klik untuk zoom ke lokasi ini di peta")
+                        st.caption(r.jenis + "  |  [Buka di Google Maps](" + gmaps(r.latitude, r.longitude) + ")")
 
     with st.expander("Cara membaca"):
         st.markdown(
@@ -563,4 +1191,3 @@ with tab_daftar:
             st.caption("'Biasanya' adalah angka pembanding untuk menilai apakah suatu titik kekurangan merchant. "
                        "Kalau angkanya terlihat janggal untuk satu jenis tempat, urutan prioritas jenis itu perlu dicurigai.")
             st.dataframe(ref_table, hide_index=True)
-        
